@@ -1,0 +1,111 @@
+Create table statements and populating data with create statements
+-----------------------------------------------------------------------------------------------------------------------------------------------
+create table project2_animal_type as (select rownum as Animal_type_id,animal_type from (select distinct animal_type from project2_data_load));
+
+create table project2_animal_breed as 
+(select rownum as Animal_breed_id,animal_breed from (select distinct animal_breed from project2_data_load));
+
+create table project2_animal_origin as 
+(select rownum as animal_origin_id, animal_origin from (select distinct(animal_origin) from project2_data_load where animal_origin is not null) );
+
+create table project2_animal_outcome as 
+(select rownum as outcome_id, tab1.* from(select outcome_type, outcome_subtype from project2_data_load group by outcome_type, outcome_subtype order by outcome_type, outcome_subtype)tab1);
+
+create table project2_animal_intake as 
+(select rownum as intake_id, tab1.* from(select intake_type, intake_subtype from project2_data_load group by intake_type, intake_subtype order by  intake_type, intake_subtype)tab1);
+
+CREATE TABLE PROJECT2_ANIMAL AS
+(selecT  DISTINCT pdl.animal_id, PAT.ANIMAL_TYPE_ID,pab.animal_BREED_ID from project2_data_load pdl,project2_animal_type pat, project2_animal_breed pab where 
+pdl.animal_type= pat.animal_type
+and pdl.animal_breed=pab.animal_breed);
+
+create table project2_animal_kennel as 
+(select rownum as kennel_id, kennel_number from (select distinct(kennel_number) from project2_data_load order by kennel_number));
+
+create table  project2_shelter_visit as(
+select distinct pdl.impound_number, pdl.animal_id, pak.kennel_id,ai.intake_id,pdl.reason ,pdl.staff_id, pdl.intake_date, pdl.intake_time, pdl.due_out,pdl.intake_condition ,pdl.hold_request,
+ao.outcome_id, pdl.outcome_date,pdl.outcome_time,pdl.receipt_number, pdl.outcome_condition,pdl.chip_status, aor.animal_origin_id,pdl.additional_information
+from project2_data_load pdl, project2_animal an, project2_animal_intake ai, project2_animal_outcome ao, project2_animal_origin aor , project2_animal_kennel pak
+where pdl.animal_id=an.animal_id
+and (pdl.intake_type=ai.intake_type and pdl.intake_subtype=ai.intake_subtype)
+and (pdl.outcome_type=ao.outcome_type and pdl.outcome_subtype=ao.outcome_subtype)
+and (pdl.animal_origin=aor.animal_origin or nvl(pdl.animal_origin,'UNKNOWN')= aor.animal_origin)
+and pdl.kennel_number=pak.kennel_number);
+-------------------------------------------------------------------------------------------------------------------------------------------------
+Alter table statements to add constraints
+-------------------------------------------------------------------------------------------------------------------------------------------------
+alter table project2_animal_type add constraint project2_animal_typePK Primary key (Animal_type_id);
+alter table project2_animal_source add constraint project2_animal_sourcePK Primary key (animal_source_id);
+alter table project2_animal_breed add constraint project2_animal_brerdPK Primary key (Animal_breed_id);
+alter table  project2_animal_origin add constraint project2_animal_originPK Primary key (animal_origin_id);
+alter table  project2_animal_condition add constraint project2_animal_conditionPK Primary key (Condition_id);
+alter table  project2_animal_outcome add constraint project2_animal_outcomePK Primary key (outcome_id);
+alter table  project2_animal_intake add constraint project2_animal_intakePK Primary key (intake_id);
+alter table  PROJECT2_ANIMAL add constraint project2_animal_PK Primary key (animal_id);
+alter table  PROJECT2_ANIMAL add constraint project2_animal_type_FK foreign key (Animal_type_id) references project2_animal_type(Animal_type_id);
+alter table  PROJECT2_ANIMAL add constraint project2_animal_breed_FK foreign key (Animal_breed_id) references project2_animal_breed(Animal_breed_id);
+alter table  project2_animal_kennel add constraint project2_animal_kennel_PK Primary key (kennel_id);
+alter table  project2_shelter_visit add constraint project2_shelter_visit_PK Primary key (impound_number);
+alter table  project2_shelter_visit add constraint project2_shelter_animal_FK foreign key (animal_id) references project2_animal(animal_id);
+alter table  project2_shelter_visit add constraint project2_shelter_kennel_FK foreign key (kennel_id) references project2_animal_kennel(kennel_id);
+alter table  project2_shelter_visit add constraint project2_shelter_intake_FK foreign key (intake_id) references project2_animal_intake(intake_id);
+alter table  project2_shelter_visit add constraint project2_shelter_outcome_FK foreign key (outcome_id) references project2_animal_outcome(outcome_id);
+alter table  project2_shelter_visit add constraint project2_shelter_origin_FK foreign key (animal_origin_id) references project2_animal_origin(animal_origin_id);
+--------------------------------------------------------------------------------------------------------------------------------------------------------
+Report 1 Query
+--------------------------------------------------------------------------------------------------------------------------------------------------------
+select animal_type, animal_breed,Percentage_of_animals_survived ,total_animals, year from (select tab1.animal_type, tab1.animal_breed,round((tab1.animals_survived/tab2.total_animals)*100,2) as Percentage_of_animals_survived, tab1.animals_survived, tab2.total_animals, tab1.year from
+(select pat.animal_type, pab.animal_breed ,to_char(sv.intake_date,'YYYY') as year, count(pab.animal_breed) as animals_survived 
+from project2_animal_type pat,project2_animal_breed pab,project2_shelter_visit sv, project2_animal ani,project2_animal_outcome ao 
+where sv.outcome_id=ao.outcome_id
+and sv.outcome_id is not null
+and sv.animal_id=ani.animal_id
+and pab.animal_breed_id=ani.animal_breed_id
+and ani.animal_type_id=pat.animal_type_id
+and ao.outcome_type not in ('DIED','DEAD ON ARRIVAL','EUTHANIZED')
+and pat.animal_type in ('CAT','DOG')
+and to_char(sv.intake_date,'YYYY')>='2016'
+group by pat.animal_type, pab.animal_breed,to_char(sv.intake_date,'YYYY') having count(pab.animal_breed)>200 ) tab1
+inner join
+(select pat.animal_type, pab.animal_breed ,to_char(sv.intake_date,'YYYY') as year, count(pab.animal_breed) as total_animals
+from project2_animal_type pat,project2_animal_breed pab,project2_shelter_visit sv, project2_animal ani,project2_animal_outcome ao 
+where sv.outcome_id=ao.outcome_id
+and sv.outcome_id is not null
+and sv.animal_id=ani.animal_id
+and pab.animal_breed_id=ani.animal_breed_id
+and ani.animal_type_id=pat.animal_type_id
+and pat.animal_type in ('CAT','DOG')
+and to_char(sv.intake_date,'YYYY')>='2016'
+group by pat.animal_type, pab.animal_breed,to_char(sv.intake_date,'YYYY') having count(pab.animal_breed)>200 )tab2 
+on tab1.animal_breed=tab2.animal_breed
+and tab1.animal_type=tab2.animal_type
+and tab1.year=tab2.year )
+order by Percentage_of_animals_survived desc;
+-----------------------------------------------------------------------------------------------------------------------------------------------------------
+Report 2 Query
+-----------------------------------------------------------------------------------------------------------------------------------------------------------
+select tab1.intake_type, tab1.outcome_type,tab1.number_of_outcomes, round((tab3.Total_outcome_type/84630)*100,2) as Percent_total_outcomes, round((tab1.number_of_outcomes/tab2.Total_intake_type)*100 ,2)as Percent_outcomes_intake_typ, 
+round((tab1.number_of_outcomes/tab3.Total_outcome_type)*100,2) as  Percent_outcomes_outcome_typ
+from (select ai.intake_type, ao.outcome_type, count(ao.outcome_type)  as number_of_outcomes from project2_shelter_visit sv , project2_animal_intake ai, project2_animal_outcome ao , project2_animal_type pat , project2_animal ani
+where sv.intake_id=ai.intake_id
+and sv.outcome_id=ao.outcome_id
+and sv.animal_id=ani.animal_id
+and ani.animal_type_id=pat.animal_type_id
+and pat.animal_type in ('CAT','DOG') 
+group by ai.intake_type, ao.outcome_type order by ai.intake_type) tab1,
+(select ai.intake_type, count(ai.intake_type) as Total_intake_type from project2_shelter_visit sv , project2_animal_intake ai, project2_animal_outcome ao , project2_animal_type pat , project2_animal ani
+where sv.intake_id=ai.intake_id
+and sv.outcome_id=ao.outcome_id
+and sv.animal_id=ani.animal_id
+and ani.animal_type_id=pat.animal_type_id
+and pat.animal_type in ('CAT','DOG') 
+group by  ai.intake_type)tab2,
+(select ao.outcome_type, count(ao.outcome_type) as Total_outcome_type from project2_shelter_visit sv , project2_animal_intake ai, project2_animal_outcome ao , project2_animal_type pat , project2_animal ani
+where sv.intake_id=ai.intake_id
+and sv.outcome_id=ao.outcome_id
+and sv.animal_id=ani.animal_id
+and ani.animal_type_id=pat.animal_type_id
+and pat.animal_type in ('CAT','DOG') 
+group by  ao.outcome_type)tab3 where
+tab1.intake_type=tab2.intake_type
+and tab1.outcome_type=tab3.outcome_type;
